@@ -1,97 +1,126 @@
-from math import sqrt
-from scipy import stats
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
-import seaborn as sns
-from pydataset import data
-import statistics
-import acquire
+import numpy as np
+
 from sklearn.model_selection import train_test_split
 from sklearn.impute import SimpleImputer
-import warnings
-warnings.filterwarnings("ignore")
 
+###################### Prepare Iris Data ######################
 
+def prep_iris(df):
 
-def clean_iris(df):
-    df = df.drop(columns = ['species_id'])
-    df = df.rename(columns={"species_name": "species"})
-    df_dummy = pd.get_dummies(df['species'], drop_first=True)
-    df= pd.concat([df, df_dummy], axis = 1)
+    '''Prepares acquired Iris data for exploration'''
+    
+    # drop column using .drop(columns=column_name)
+    df = df.drop(columns='species_id')
+    
+    # remame column using .rename(columns={current_column_name : replacement_column_name})
+    df = df.rename(columns={'species_name':'species'})
+    
+    # create dummies dataframe using .get_dummies(column_name,not dropping any of the dummy columns)
+    dummy_df = pd.get_dummies(df['species'], drop_first=False)
+    
+    # join original df with dummies df using .concat([original_df,dummy_df], join along the index)
+    df = pd.concat([df, dummy_df], axis=1)
+    
     return df
 
-def split_iris_data(df):
-    """
-    splits the data in train validate and test 
-    """
-    train, test = train_test_split(df, test_size = 0.2, random_state = 123, stratify = df.species)
-    train, validate = train_test_split(train, test_size=.3, random_state=123, stratify=train.species)
+###################### Prepare Iris Data With Split ######################
+
+def split_data(df):
+    '''
+    take in a DataFrame and return train, validate, and test DataFrames; stratify on species.
+    return train, validate, test DataFrames.
+    '''
+    
+    # splits df into train_validate and test using train_test_split() stratifying on species to get an even mix of each species
+    train_validate, test = train_test_split(df, test_size=.2, random_state=123, stratify=df.species)
+    
+    # splits train_validate into train and validate using train_test_split() stratifying on species to get an even mix of each species
+    train, validate = train_test_split(train_validate, 
+                                       test_size=.3, 
+                                       random_state=123, 
+                                       stratify=train_validate.species)
+    return train, validate, test
+
+
+def prep_iris_with_split(df):
+    '''Prepares acquired Iris data for exploration'''
+    
+    # drop column using .drop(columns=column_name)
+    df = df.drop(columns='species_id')
+    
+    # remame column using .rename(columns={current_column_name : replacement_column_name})
+    df = df.rename(columns={'species_name':'species'})
+    
+    # create dummies dataframe using .get_dummies(column_name,not dropping any of the dummy columns)
+    dummy_df = pd.get_dummies(df['species'], drop_first=False)
+    
+    # join original df with dummies df using .concat([original_df,dummy_df], join along the index)
+    df = pd.concat([df, dummy_df], axis=1)
+    
+    # split data into train/validate/test using split_data function
+    train, validate, test = split_data(df)
     
     return train, validate, test
 
-def prep_irs_data(df):
-    """
-    takes in a data from titanic database, cleans the data, splits the data
-    in train validate test and imputes the missing values for embark_town. 
-    Returns three dataframes train, validate and test.
-    """
-    df = clean_iris(df)
-    train, validate, test = split_iris_data(df)
-    #train, validate, test = impute_mode(train, validate, test) #nothing to impute
-    return train, validate, test
-
-
-
-def clean_telco():
-    df = acquire.get_telco_data()
-    df = df.drop_duplicates()
-    df = df.drop(columns = ['customer_id'])
-    df_dummy = pd.get_dummies(df[['gender', 'partner', 'dependents', 'phone_service', 'multiple_lines', 'online_security', 'online_backup', 'device_protection', 'tech_support', 'streaming_tv', 'streaming_movies', 'paperless_billing'  ]], drop_first=[True, True, True, True, True, True, True, True, True, True, True, True])
-    df= pd.concat([df, df_dummy], axis = 1)
-    return df
-
-
-############## Titanic ##################
-
-def clean_titanic(df):
+def prep_titanic(df):
     '''
-    This function will drop any duplicate observations, 
-    drop columns not needed, fill missing embarktown with 'Southampton'
-    and create dummy vars of sex and embark_town. 
+    This function take in the titanic data acquired by get_titanic_data,
+    Returns prepped train, validate, and test dfs with embarked dummy vars,
+    deck dropped, and the mean of age imputed for Null values.
     '''
-    df.drop_duplicates(inplace=True)
-    df.drop(columns=['deck', 'embarked', 'class', 'age'], inplace=True)
-    df.embark_town.fillna(value='Southampton', inplace=True)
-    dummy_df = pd.get_dummies(df[['sex', 'embark_town']], drop_first=False)
-    return pd.concat([df, dummy_df], axis=1)
-
-def split_titanic_data(df):
-    """
-    splits the data in train validate and test 
-    """
-    train, test = train_test_split(df, test_size = 0.2, random_state = 123, stratify = df.survived)
-    train, validate = train_test_split(train, test_size=.25, random_state=123, stratify=train.survived)
+    
+    # drop rows where embarked/embark town are null values
+    df = df[~df.embarked.isnull()]
+    
+    # encode embarked using dummy columns
+    titanic_dummies = pd.get_dummies(df.embarked, drop_first=True)
+    
+    # join dummy columns back to df
+    df = pd.concat([df, titanic_dummies], axis=1)
+    
+    # drop the deck column
+    df = df.drop(columns='deck')
+    
+    # split data into train, validate, test dfs
+    train, validate, test = titanic_split(df)
+    
+    # impute mean of age into null values in age column
+    train, validate, test = impute_mean_age(train, validate, test)
     
     return train, validate, test
 
-def impute_mode(train, validate, test):
+def titanic_split(df):
     '''
-    impute mode for embark_town
+    This function take in the titanic data acquired by get_titanic_data,
+    performs a split and stratifies survived column.
+    Returns train, validate, and test dfs.
     '''
-    imputer = SimpleImputer(strategy='most_frequent')
-    train[['embark_town']] = imputer.fit_transform(train[['embark_town']])
-    validate[['embark_town']] = imputer.transform(validate[['embark_town']])
-    test[['embark_town']] = imputer.transform(test[['embark_town']])
+    train_validate, test = train_test_split(df, test_size=.2, 
+                                        random_state=123, 
+                                        stratify=df.survived)
+    train, validate = train_test_split(train_validate, test_size=.3, 
+                                   random_state=123, 
+                                   stratify=train_validate.survived)
     return train, validate, test
 
-def prep_titanic_data(df):
-    """
-    takes in a data from titanic database, cleans the data, splits the data
-    in train validate test and imputes the missing values for embark_town. 
-    Returns three dataframes train, validate and test.
-    """
-    df = clean_titanic(df)
-    train, validate, test = split_titanic_data(df)
-    train, validate, test = impute_mode(train, validate, test)
+
+def impute_mean_age(train, validate, test):
+    '''
+    This function imputes the mean of the age column for
+    observations with missing values.
+    Returns transformed train, validate, and test df.
+    '''
+    # create the imputer object with mean strategy
+    imputer = SimpleImputer(strategy = 'mean')
+    
+    # fit on and transform age column in train
+    train['age'] = imputer.fit_transform(train[['age']])
+    
+    # transform age column in validate
+    validate['age'] = imputer.transform(validate[['age']])
+    
+    # transform age column in test
+    test['age'] = imputer.transform(test[['age']])
+    
     return train, validate, test
